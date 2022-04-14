@@ -1,4 +1,10 @@
 # $Id: Makefile.linux,v 1.91 2022/04/19 22:59:06 karn Exp $
+BUILD=build
+# Are we in the build directory?
+ifeq ($(BUILD),$(notdir $(CURDIR)))
+# yep - carry on..
+VPATH=$(SRCDIR)
+
 COPTS=-DNDEBUG=1 -O3 -march=native -std=gnu11 -pthread -Wall -funsafe-math-optimizations -D_GNU_SOURCE=1
 # Get local versions (e.g., of librtlsdr)
 LDOPTS=-L/usr/local/lib
@@ -11,7 +17,8 @@ DAEMONDIR=/usr/local/sbin
 VARDIR=/var/lib/ka9q-radio
 LDLIBS=-lpthread -lbsd -lm
 
-DAEMONS=aprs aprsfeed funcube opus packet radio airspy airspyhf stereo rds rtlsdr
+DAEMONS=aprs aprsfeed radio soapysdr stereo rds
+#DAEMONS=aprs aprsfeed funcube opus packet radio airspy airspyhf stereo rds rtlsdr
 
 EXECS=iqplay iqrecord modulate monitor opussend pcmsend pcmcat pcmrecord pcmspawn control metadump pl show-pkt show-sig tune wspr-decode setfilt
 
@@ -38,7 +45,9 @@ SRC=airspy.c airspyhf.c aprs.c aprsfeed.c attr.c audio.c avahi.c ax25.c bandplan
 	   status.c stereo.c wfm.c wspr-decode.c attr.h ax25.h bandplan.h conf.h config.h decimate.h \
 	   fcd.h fcdhidcmd.h filter.h hidapi.h iir.h misc.h modes.h multicast.h osc.h radio.h status.h
 
-all: depend $(DAEMONS) $(EXECS) $(AFILES) $(SYSTEMD_FILES) $(UDEV_FILES) $(CONF_FILES) $(AIRSPY_FILES) $(BLACKLIST) 98-sockbuf.conf start-ka9q-horus.sh
+all: depend $(DAEMONS) $(EXECS) $(AFILES) $(SYSTEMD_FILES) $(UDEV_FILES) $(CONF_FILES) $(AIRSPY_FILES) $(BLACKLIST) 98-sockbuf.conf
+
+daemons: depend $(DAEMONS)
 
 # Don't overwrite existing config files in /etc/radio
 install: $(DAEMONS) $(EXECS) $(AFILES) $(SYSTEMD_FILES) $(UDEV_FILES) $(CONF_FILES) $(AIRSPY_FILES) $(BLACKLIST) 98-sockbuf.conf start-ka9q-horus.sh
@@ -61,19 +70,15 @@ install: $(DAEMONS) $(EXECS) $(AFILES) $(SYSTEMD_FILES) $(UDEV_FILES) $(CONF_FIL
 #	cp -n -v --target-directory=/etc/radio/airspy.conf.d $(AIRSPY_FILES)
 	systemctl daemon-reload
 
-clean:
-	rm -f *.o *.a .depend $(EXECS) $(DAEMONS)
-
-
 depend: .depend
 
 .depend: $(SRC)
-	rm -f .depend
-	$(CC) $(CFLAGS) -MM $^ > .depend
+	rm -f $@
+	$(CC) $(CFLAGS) -MM $^ > $@
 
 -include .depend
 
-.PHONY: clean all install depend
+.PHONY: all install depend daemons
 
 # Executables
 airspy: airspy.o libradio.a
@@ -157,6 +162,9 @@ radio: main.o audio.o fm.o wfm.o linear.o radio.o rtcp.o radio_status.o modes.o 
 rds: rds.o libradio.a
 	$(CC) $(LDOPTS) -o $@ $^ -lavahi-client -lavahi-common -lfftw3f_threads -lfftw3f -lbsd -lm -lpthread
 
+soapysdr: soapysdr.o libradio.a
+	$(CC) $(LDOPTS) -o $@ $^ -lSoapySDR -lavahi-client -lavahi-common -lbsd -lm -lpthread
+
 stereo: stereo.o libradio.a
 	$(CC) $(LDOPTS) -o $@ $^ -lavahi-client -lavahi-common -lfftw3f_threads -lfftw3f -lbsd -lm -lpthread
 
@@ -174,5 +182,28 @@ libradio.a: avahi.o attr.o filter.o iir.o status.o misc.o multicast.o osc.o conf
 	ar rv $@ $?
 	ranlib $@
 
+else
+# not in build dir.. re-invoke ourselves in build directory
+# @see: http://make.mad-scientist.net/papers/multi-architecture-builds/
 
+# prevent any built-in rules from being used
+.SUFFIXES:
 
+# mark the build directory as phony (thus build-once every time)
+.PHONY: $(BUILD)
+# the magic rule - first ensure build directory exists, then re-run make in there with specified goal/target
+$(BUILD):
+	+mkdir -p $(BUILD)
+	+$(MAKE) -C $@ -f $(CURDIR)/$(lastword $(MAKEFILE_LIST)) SRCDIR=$(CURDIR) $(MAKECMDGOALS)
+
+# prevent make attempting to re-build this makefile..
+$(lastword $(MAKEFILE_LIST)): ;
+
+# make any goal/target (apart from ourselves) depend on build directory, hence...
+% :: $(BUILD); :
+
+.PHONY: clean
+clean:
+	rm -rf $(BUILD)
+
+endif
