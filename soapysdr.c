@@ -350,7 +350,7 @@ int main(int argc,char *argv[]){
     while(total<Blocksize){
       int flags = 0;
       long long tstamp = 0L;
-      int r = SoapySDRDevice_readStream(sdr->psoap,sdr->pstream,&dp,Blocksize-total,&flags,&tstamp,100000);
+      int r = SoapySDRDevice_readStream(sdr->psoap,sdr->pstream,(void * const *)&dp,Blocksize-total,&flags,&tstamp,100000);
       if(r < 0){
         if(r == SOAPY_SDR_OVERFLOW){
           sdr->overflows++; // Not fatal
@@ -724,9 +724,9 @@ static int front_end_init(struct sdrstate *sdr,const char *device,int L){
     return -1;
   }
   // Create and start stream
-  SoapySDRStream *stream;
   size_t chan = 0;
-  if(SoapySDRDevice_setupStream(sdr->psoap,&stream,SOAPY_SDR_RX,SOAPY_SDR_CS16,&chan,1,NULL)){
+  SoapySDRStream *stream = SoapySDRDevice_setupStream(sdr->psoap,SOAPY_SDR_RX,SOAPY_SDR_CS16,&chan,1,NULL);
+  if (!stream) {
     fprintf(stderr,"SoapySDRDevice_setupStream(%s): %s\n",device,SoapySDRDevice_lastError());
     return -1;
   }

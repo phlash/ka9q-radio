@@ -162,6 +162,7 @@ radio: main.o audio.o fm.o wfm.o linear.o radio.o rtcp.o radio_status.o modes.o 
 rds: rds.o libradio.a
 	$(CC) $(LDOPTS) -o $@ $^ -lavahi-client -lavahi-common -lfftw3f_threads -lfftw3f -lbsd -lm -lpthread
 
+soapysdr: CFLAGS+=$(shell pkg-config --cflags SoapySDR)
 soapysdr: soapysdr.o libradio.a
 	$(CC) $(LDOPTS) -o $@ $^ -lSoapySDR -lavahi-client -lavahi-common -lbsd -lm -lpthread
 
